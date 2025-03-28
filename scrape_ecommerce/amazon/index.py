@@ -7,6 +7,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 # Global scraping configurations
 retries = 2
@@ -109,6 +110,7 @@ def scrape_amazon_products():
                         if product_currency_element:
                             product_currency = product_currency_element.get_text(strip=True)
                             if product_currency:
+                                print("this is the product currency: ",product_currency)
                                 product_json_data["currency"] = product_currency
                     except Exception as e:
                         print("Error extracting product currency:", e)
@@ -121,24 +123,11 @@ def scrape_amazon_products():
                         if product_price_element:
                             product_price = product_price_element.get_text(strip=True)
                             if product_price:
+                                print("this is the product price :", product_price)
                                 product_json_data["price"] = product_price
                     except Exception as e:
                         print("Error extracting product currency:", e)
-
-                    #Extracting product description 
-
-                    try : 
-                        product_description_element = retry_extraction(
-                            lambda : browser.find_elements(By.CSS_SELECTOR, "div.feature-bullets li")
-                        )
-                        if product_description_element : 
-                            print("Product description is found")
-                            product_description = product_description_element.get_text(strip=True)
-                            product_json_data["description"] = product_description
-
-                    except Exception as e : 
-                        print("Product description is not found")
-
+                        
                     # Open product page to extract
                     if product_json_data["url"]:
                         try:
@@ -151,6 +140,43 @@ def scrape_amazon_products():
                             time.sleep(1)
                             product_page_html = BeautifulSoup(browser.page_source, "html.parser")
 
+                            
+
+                            try:
+                                # Primary selector: Wait until all description elements are present.
+                                description_elements = WebDriverWait(browser, 10).until(
+                                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#feature-bullets li.a-spacing-mini"))
+                                )
+
+                                if description_elements:
+                                        for element in description_elements:
+                                            browser.execute_script("arguments[0].scrollIntoView(true);", element)
+                                            time.sleep(0.5)
+                                            print(element.text)
+                            except TimeoutException:
+                                print("Primary selector elements not found, trying alternative selector...")
+                                try:
+                                    # Alternative selector: Wait for the container element that holds the list items.
+                                    container_element = WebDriverWait(browser, 10).until(
+                                        EC.presence_of_element_located((By.CSS_SELECTOR, "ul.a-unordered-list.a-vertical.a-spacing-small"))
+                                    )
+                                    # Now find all the <li> elements within the container.
+                                    description_elements = container_element.find_elements(By.CSS_SELECTOR, "li")
+
+                                    if description_elements:
+                                        for element in description_elements:
+                                            browser.execute_script("arguments[0].scrollIntoView(true);", element)
+                                            time.sleep(0.5)
+                                            print(element.text)
+
+                                except TimeoutException as e:
+                                    print("Alternative selector elements not found either:", e)
+                                    description_elements = []
+
+                            
+                            
+
+
                             # Extracting product reviews
                             try:
                                 product_review_element = retry_extraction(
@@ -162,6 +188,7 @@ def scrape_amazon_products():
                                         numeric_match = re.search(r"(\d+)", product_review_text)
                                         if numeric_match:
                                             numeric_value = numeric_match.group(1)
+                                            print("this is the numeric_value :", numeric_value)
                                             product_json_data["feedback"]["review"] = numeric_value
                             except Exception as e:
                                 print("Error extracting product reviews:", e)
@@ -183,15 +210,30 @@ def scrape_amazon_products():
 
                             # Extracting product supplier
                             try:
-                                product_supplier_element = retry_extraction(
-                                    lambda: product_page_html.find("a", {"id": "sellerProfileTriggerId"})
-                                )
+                                # 🔹 Primary Selector: Find the product supplier element
+                                product_supplier_element = product_page_html.find("a", {"id": "sellerProfileTriggerId"})
+
+                                if not product_supplier_element:
+                                    print("Primary selector not found, trying alternative selector...")
+
+                                    try:
+                                        # 🔹 Alternative Selector: Find using a different approach
+                                        product_supplier_element = product_page_html.find("span", {"class": "tabular-buybox-text"})
+
+                                    except Exception as e:
+                                        print("Alternative selector failed:", e)
+                                        product_supplier_element = None  # Ensure it's set to None if not found
+
+                                # ✅ Extract text if an element is found
                                 if product_supplier_element:
                                     product_supplier = product_supplier_element.get_text(strip=True)
                                     if product_supplier:
+                                        print("product supplier found :", product_supplier)
                                         product_json_data["supplier"] = product_supplier
+
                             except Exception as e:
                                 print("Error extracting product supplier:", e)
+
 
                             # Extracting product media: images and videos
                             try:
@@ -255,6 +297,9 @@ def scrape_amazon_products():
                                     print("Error extracting product videos:", e)
                             except Exception as e:
                                 print("Error extracting product images and videos:", e)
+
+
+                         
                         
                         except Exception as e:
                             print("Error processing product page:", e)
