@@ -3,6 +3,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
 
 # Setup Selenium configurations
 options = webdriver.ChromeOptions()
@@ -14,7 +15,7 @@ browser.maximize_window()
 
 # Configurable parameters
 search_keyword = "laptops"
-max_pages = 2  # Number of pages to navigate
+max_pages = 1  # Number of pages to navigate
 
 def navigate_amazon_pages():
     """Navigates Amazon search pages and clicks each product one by one."""
@@ -61,34 +62,21 @@ def navigate_amazon_pages():
                         time.sleep(2)
                         print(element.text)
 
-
-                    try:
-                        # Wait for the detail container with the given ID.
-                        detail_divs = WebDriverWait(browser, 10).until(
-                            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div#detailBullets_feature_div"))
-                        )
-                        
-                        if detail_divs:
-                            detail_div = detail_divs[0]
-                            # Find all <li> tags within the detail container.
-                            li_elements = detail_div.find_elements(By.CSS_SELECTOR, "li")
-                            
-                            for li in li_elements:
-                                if "ASIN" in li.text:
-                                    # Scroll the matching <li> element into view.
-                                    browser.execute_script("arguments[0].scrollIntoView(true);", li)
-                                    asin_text = li.text
-                                    print("ASIN label text:", asin_text)
-                                    break
-                        else:
-                            print("Detail container not found.")
-                            
-                    except Exception as e:
-                        print("Not found the ASIN number:", e)
+                    # Locate the detail container and save its HTML with BeautifulSoup
+                    detail_container = WebDriverWait(browser, 10).until(
+                        EC.visibility_of_element_located((By.ID, "detailBullets_feature_div"))
+                    )
+                    html_content = detail_container.get_attribute('outerHTML')
+                    soup = BeautifulSoup(html_content, 'html.parser')
+                    with open('detail_container.html', 'w', encoding='utf-8') as file:
+                        file.write(soup.prettify())
+                    print("The HTML content has been saved to detail_container.html")
                     
-
-
-
+                    # Scroll to detail container and find the ASIN element
+                    browser.execute_script("arguments[0].scrollIntoView(true);", detail_container)
+                    asin_element = detail_container.find_element(By.XPATH, ".//li[.//span[contains(normalize-space(), 'ASIN')]]//span[2]")
+                    asin_number = asin_element.text.strip()
+                    print("ASIN:", asin_number)
 
                     # Return to search results
                     browser.back()
