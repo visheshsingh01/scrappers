@@ -94,32 +94,47 @@ def scrape_products(driver):
 
                     except Exception as e : 
                         print("Product name could not be found")
-                    try : 
-                        image_div = WebDriverWait(driver, 10).until(EC.visibility_of_element_located(((By.CSS_SELECTOR, "div.j9BzIm"))))
+                    try: 
+                        image_div = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div.j9BzIm")))
                         image_elements = image_div.find_elements(By.CSS_SELECTOR, "li.YGoYIP.Ueh1GZ")
-                        if image_elements :
-                         print(f"this is the length of the all the li tag {len(image_elements)}")
-                         for img in image_elements: 
-                             driver.execute_script("arguments[0].click();", img)
-
-                             time.sleep(1)
-                             img.click()
-                             time.sleep(1)
-                             try : 
-                                product_image_element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div._4WELSP._6lpKCl img")))
-                                driver.execute_script("arguments[0].scrollIntoView(true);", product_image_element)
-                                time.sleep(1)
-                                product_image_source = product_image_element.get_attribute("src")
-                                print("image source is this :", product_image_source)
-                             except Exception as e : 
-                                 print("Product image not found :",e)
+                    
+                        if image_elements:
+                            print(f"This is the length of all the li tags: {len(image_elements)}")
                             
+                            last_image_src = None  # Track last image to avoid duplicates
+                    
+                            for index, img in enumerate(image_elements):
+                                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", img)
+                                driver.execute_script("arguments[0].click();", img)
+                                time.sleep(2)  # Wait for image change
+                    
+                                try:
+                                    # Wait for the main image to change
+                                    WebDriverWait(driver, 10).until(
+                                        EC.staleness_of(driver.find_element(By.CSS_SELECTOR, "div._4WELSP._6lpKCl img"))
+                                    )
+                    
+                                    # Get the new image
+                                    product_image_element = WebDriverWait(driver, 10).until(
+                                        EC.presence_of_element_located((By.CSS_SELECTOR, "div._4WELSP._6lpKCl img"))
+                                    )
+                                    
+                                    product_image_source = product_image_element.get_attribute("src")
+                                    
+                                    # Ensure the image source is unique before printing
+                                    if product_image_source != last_image_src:
+                                        last_image_src = product_image_source  # Update last seen image
+                                        print(f"Image {index + 1}: {product_image_source}")
+                                    else:
+                                        print(f"Image {index + 1}: Skipped (duplicate)")
+                    
+                                except Exception as e: 
+                                    print(f"Image {index + 1} not found:", e)
+                        else: 
+                            print("No li tags found.")
+                    except Exception as e: 
+                        print("No div or element found:", e)
 
-
-                        else : 
-                            print("no li tag found")
-                    except Exception as e : 
-                        print("No div or element found",e)
                         
 
 
