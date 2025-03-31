@@ -28,7 +28,6 @@ def navigate_amazon_pages():
             WebDriverWait(browser, 10).until(
                 EC.presence_of_element_located((By.XPATH, '//span[@data-component-type="s-search-results"]'))
             )
-            time.sleep(2)
 
             # Find all product links
             product_elements = browser.find_elements(By.XPATH, '//a[contains(@class, "a-link-normal s-no-outline")]')
@@ -42,14 +41,13 @@ def navigate_amazon_pages():
 
             for product_url in product_links:
                 try:
-                    print(f"Clicking product: {product_url}")
+                    print(f"Navigating to product: {product_url}")
                     browser.get(product_url)
                     
                     # Wait for product page to load
                     WebDriverWait(browser, 10).until(
-                        lambda d: d.execute_script("return document.readyState") == "complete"
+                        EC.presence_of_element_located((By.ID, "productTitle"))
                     )
-                    time.sleep(3)
                     
                     # Wait for all description elements to be present
                     description_elements = WebDriverWait(browser, 10).until(
@@ -57,9 +55,8 @@ def navigate_amazon_pages():
                     )
                     
                     # Iterate over each element in the list and print its text
-                    for element in description_elements: 
+                    for element in description_elements:
                         browser.execute_script("arguments[0].scrollIntoView(true);", element)
-                        time.sleep(2)
                         print(element.text)
 
                     # Locate the detail container and save its HTML with BeautifulSoup
@@ -72,17 +69,10 @@ def navigate_amazon_pages():
                         file.write(soup.prettify())
                     print("The HTML content has been saved to detail_container.html")
                     
-                    # Scroll to detail container and find the ASIN element
-                    browser.execute_script("arguments[0].scrollIntoView(true);", detail_container)
-                    asin_element = detail_container.find_element(By.XPATH, ".//li[.//span[contains(normalize-space(), 'ASIN')]]//span[2]")
-                    asin_number = asin_element.text.strip()
-                    print("ASIN:", asin_number)
-
                     # Return to search results
                     browser.back()
-                    time.sleep(2)
                 except Exception as e:
-                    print(f"Error opening product {product_url}: {e}")
+                    print(f"Error processing product {product_url}: {e}")
 
         except Exception as e:
             print(f"Error on page {page}: {e}")

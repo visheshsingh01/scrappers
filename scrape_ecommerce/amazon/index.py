@@ -12,7 +12,7 @@ from selenium.common.exceptions import TimeoutException
 # Global scraping configurations
 retries = 2
 search_page = 1  # Adjust to desired number of pages
-search_keyword = "laptops"
+search_keyword = "nike shoes"
 
 # Setup Selenium configurations
 options = webdriver.ChromeOptions()
@@ -139,9 +139,7 @@ def scrape_amazon_products():
                             )
                             time.sleep(1)
                             product_page_html = BeautifulSoup(browser.page_source, "html.parser")
-
                             
-
                             try:
                                 # Primary selector: Wait until all description elements are present.
                                 description_elements = WebDriverWait(browser, 10).until(
@@ -172,10 +170,6 @@ def scrape_amazon_products():
                                 except TimeoutException as e:
                                     print("Alternative selector elements not found either:", e)
                                     description_elements = []
-
-                            
-                            
-
 
                             # Extracting product reviews
                             try:
@@ -233,73 +227,30 @@ def scrape_amazon_products():
 
                             except Exception as e:
                                 print("Error extracting product supplier:", e)
-
-
-                            # Extracting product media: images and videos
+                            
+                            # Extacting product images
                             try:
-                                media_btn = WebDriverWait(browser, 10).until(
-                                    EC.element_to_be_clickable((By.ID, "imgTagWrapperId"))
+                                altImages = WebDriverWait(browser, 10).until(
+                                    EC.element_to_be_clickable((By.ID, "altImages"))
                                 )
-                                if media_btn:
-                                    media_btn.click()
-                                    time.sleep(1)
-                                # Extracting product images
-                                try:
-                                    product_images = browser.find_elements(
-                                        By.CSS_SELECTOR,
-                                        "div.ivThumb[data-csa-c-type='item'][data-csa-c-component='imageBlock'][data-csa-c-content-id='image-block-immersive-view-alt-image']"
-                                    )
-                                    if product_images:
-                                        image_arr = set()
-                                        for image_btn in product_images:
-                                            image_btn.click()
-                                            time.sleep(1)
-                                            image_container = WebDriverWait(browser, 10).until(
-                                                EC.presence_of_element_located((By.ID, "ivLargeImage"))
-                                            )
-                                            if image_container:
-                                                image_html = BeautifulSoup(image_container.get_attribute("outerHTML"), "html.parser")
-                                                image_tag = image_html.find("img")
-                                                if image_tag and image_tag.has_attr("src"):
-                                                    image_src = image_tag["src"]
-                                                    image_arr.add(image_src)
-                                        product_json_data["images"] = list(image_arr)
-                                except Exception as e:
-                                    print("Error extracting product images:", e)
-                                
-                                # Open video tab
-                                video_btn = WebDriverWait(browser, 10).until(
-                                    EC.element_to_be_clickable((By.ID, "ivVideosTabHeading"))
-                                )
-                                if video_btn:
-                                    video_btn.click()
-                                    time.sleep(1)
-                                # Extracting product videos
-                                try:
-                                    product_videos_container = browser.find_element(By.CSS_SELECTOR, "div.div-relatedvideos" )
-                                    if product_videos_container:
-                                        product_videos = product_videos_container.find_elements(
-                                            By.CSS_SELECTOR,
-                                            "a.a-link-normal.vse-carousel-item[role='button']"
+                                if altImages:
+                                    imgButtons = altImages.find_elements(By.CSS_SELECTOR, "li.imageThumbnail")
+                                    for imgButton in imgButtons:
+                                        time.sleep(1)
+                                        imgButton.click()
+                                        time.sleep(1)
+                                        product_image_wrapper = WebDriverWait(browser, 10).until(
+                                            EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.a-unordered-list.a-nostyle.a-horizontal.list.maintain-height"))
                                         )
-                                        if product_videos:
-                                            video_arr = set()
-                                            for videos_element in product_videos:
-                                                video = videos_element.get_attribute("href")
-                                                if video:
-                                                    if video.startswith("https://www.amazon.in"):
-                                                        video_arr.add(video)
-                                                    else:
-                                                        video_url = f"https://www.amazon.in{video}"
-                                                        video_arr.add(video_url)
-                                            product_json_data["videos"] = list(video_arr)
-                                except Exception as e:
-                                    print("Error extracting product videos:", e)
+                                        if product_image_wrapper:
+                                            product_image_list = product_image_wrapper.find_element(By.CSS_SELECTOR, "li.selected")
+                                            if product_image_list:
+                                                product_image = product_image_list.find_element(By.CSS_SELECTOR, "img.a-dynamic-image")
+                                                if product_image:
+                                                    product_json_data['images'].append(product_image.get_attribute('src'))
+                                                    print(product_json_data['images'])
                             except Exception as e:
-                                print("Error extracting product images and videos:", e)
-
-
-                         
+                                print("Error extracting product images")
                         
                         except Exception as e:
                             print("Error processing product page:", e)
