@@ -6,7 +6,6 @@ import json
 # Start WebDriver
 driver = webdriver.Chrome()
 
-
 # Search query
 query = "iphone"
 

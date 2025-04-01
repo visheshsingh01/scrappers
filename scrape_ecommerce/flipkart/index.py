@@ -113,9 +113,11 @@ def scrape_flipkart_products(browser):
                                 product_images_main_elem = browser.find_element(By.CSS_SELECTOR, "div.qOPjUY")
                                 if product_images_main_elem:
                                     imgButtons = product_images_main_elem.find_elements(By.CSS_SELECTOR, "li.YGoYIP")
+                                    print(len(imgButtons))
                                     for imgButton in imgButtons:
                                         try:
                                             time.sleep(1)
+                                            browser.execute_script("arguments[0].scrollIntoView(true);", imgButton)
                                             imgButton.click()
                                             time.sleep(1)
                                             try:
@@ -135,7 +137,14 @@ def scrape_flipkart_products(browser):
                                     print("No product images main element found.")
 
                                 # Extracting product description
-                                
+                                product_description_main_elem = browser.find_elements(
+                                    By.CSS_SELECTOR, "div.pqHCzB"
+                                )
+                                product_description = "".join(
+                                    elem.text.strip() for elem in product_description_main_elem if elem.text.strip()
+                                )
+                                product_json_data["description"] = product_description
+                                print(product_json_data["description"])
 
                             except Exception as e:
                                 print("Error processing product page:", e)
