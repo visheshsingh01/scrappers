@@ -10,8 +10,8 @@ from selenium.webdriver.support import expected_conditions as EC
 
 # Global scraping configurations
 retries = 2
-search_page = 1 
-search_keyword = "iphone"
+search_page = 10
+search_keyword = "Rolex Watches"
 
 # Setup Selenium configurations
 def selenium_config():

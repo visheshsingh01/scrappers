@@ -15,7 +15,7 @@ from selenium.webdriver.support import expected_conditions as EC
 # Global scraping configurations
 retries = 2
 search_page = 20  # Adjust to desired number of pages
-search_keyword = "Christian Dior perfume Sauvage"
+search_keyword = "Rolex Watches"
 
 # Setup Selenium configurations
 options = webdriver.ChromeOptions()
@@ -219,27 +219,48 @@ def scrape_alibaba_products():
                             time.sleep(2)
 
                             # Extracting product images
-                            try:
-                                media_body = browser.find_element(By.CSS_SELECTOR, '[data-submodule="ProductImageThumbsList"]').get_attribute('outerHTML')
-                                media_soup = BeautifulSoup(media_body, 'html.parser')
-                                image_elements = media_soup.select('[style*="background-image"]')
-                                image_urls = set()
-                                for element in image_elements:
-                                    style = element.get('style', '')
-                                    if 'background-image' in style:
-                                        start_index = style.find('url("') + 5
-                                        end_index = style.find('")', start_index)
-                                        if start_index != -1 and end_index != -1:
-                                            image_url = style[start_index:end_index]
-                                            if image_url.startswith('//'):
-                                                image_url = 'https:' + image_url
-                                            image_urls.add(image_url)
-                                product_json_data["images"] = list(image_urls)
-                                # Download each image immediately
-                                for img_url in image_urls:
-                                    download_image(img_url, search_keyword, product_json_data["url"])
-                            except Exception as e:
-                                print("Error extracting product images", e)
+                            # try:
+                            #     # Locate the thumbnails container
+                            #     thumbs_container = browser.find_element(
+                            #         By.CSS_SELECTOR,
+                            #         '[data-submodule="ProductImageThumbsList"]'
+                            #     )
+                            #     # Find each thumbnail element (they have inline background‑image styles)
+                            #     thumb_elements = thumbs_container.find_elements(
+                            #         By.CSS_SELECTOR,
+                            #         '[style*="background-image"]'
+                            #     )
+                            #     image_urls = set()
+                            
+                            #     for thumb in thumb_elements:
+                                    
+                            #             # Scroll thumbnail into view & click it
+                                        
+                            #         browser.execute_script("arguments[0].scrollIntoView(true);", thumb)
+                                        
+                            #         thumb.click()
+                                        
+                            #         time.sleep(2)
+                            #         product_image_view = browser.find_element(By.CSS_SELECTOR, '[data-testid="product-image-view"]')
+                            #         product_image_link = product_image_view.get_attribute('src')
+                            #         if product_image_link.startswith('//'):
+                            #             product_image_link = 'https:' + product_image_link
+                            #         image_urls.add(product_image_link)
+                            #         # style = element.get('style', '')
+                            #         # if 'background-image' in style:
+                            #         #     start_index = style.find('url("') + 5
+                            #         #     end_index = style.find('")', start_index)
+                            #         #     if start_index != -1 and end_index != -1:
+                            #         #         image_url = style[start_index:end_index]
+                            #         #         if image_url.startswith('//'):
+                            #         #             image_url = 'https:' + image_url
+                            #         #         image_urls.add(image_url)
+                            #     product_json_data["images"] = list(image_urls)
+                            #     # Download each image immediately
+                            #     for img_url in image_urls:
+                            #         download_image(img_url, search_keyword, product_json_data["url"])
+                            # except Exception as e:
+                            #     print("Error extracting product images", e)
 
                             # Extracting product videos
                             try:
