@@ -5,57 +5,64 @@ import os
 import random
 import requests
 from urllib.parse import urlparse
-
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 
-# Global scraping configurations
-retries = 2
-search_page = 20  # Adjust to desired number of pages
-search_keyword = "Rolex Watches"
+# Enhanced anti-detection configurations
+user_agents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+]
 
-# Setup Selenium configurations
-options = webdriver.ChromeOptions()
-options.add_argument("--ignore-certificate-errors")
-options.add_argument("--log-level=3")
-# options.add_argument("--headless")  # Comment out to see the browser
-browser = webdriver.Chrome(options=options)
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument(f"user-agent={random.choice(user_agents)}")
+chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+chrome_options.add_argument("--disable-application-cache")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-setuid-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--ignore-certificate-errors")
+chrome_options.add_argument("--log-level=3")
+chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+chrome_options.add_experimental_option("useAutomationExtension", False)
+
+# Initialize browser with stealth settings
+browser = webdriver.Chrome(options=chrome_options)
+browser.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": random.choice(user_agents)})
+browser.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+browser.execute_script("delete navigator.__proto__.webdriver;")
 browser.maximize_window()
 
-# Output file for saving scraped data
+# Original configurations
+retries = 2
+search_page = 20
+search_keyword = "Christian Dior Perfume"
 output_file = "products.json"
-
-# Create images folder if it doesn't exist
 images_folder = "images"
-if not os.path.exists(images_folder):
-    os.makedirs(images_folder)
+
+os.makedirs(images_folder, exist_ok=True)
 
 def initialize_json_file():
-    """Initialize the JSON file with an opening bracket."""
     with open(output_file, "w", encoding="utf-8") as f:
         f.write("[\n")
 
 def finalize_json_file():
-    """Finalize the JSON file by closing the JSON array."""
     with open(output_file, "a", encoding="utf-8") as f:
         f.write("\n]")
 
 def save_product(product_data, first_product=False):
-    """Append a product's data to the JSON file."""
     with open(output_file, "a", encoding="utf-8") as f:
         if not first_product:
             f.write(",\n")
         json.dump(product_data, f, ensure_ascii=False, indent=4)
 
 def retry_extraction(func, attempts=1, delay=1, default=""):
-    """
-    Helper function that retries an extraction function up to 'attempts' times.
-    Returns the result if successful, otherwise returns 'default'.
-    """
-    for i in range(attempts):
+    for _ in range(attempts):
         try:
             result = func()
             if result:
@@ -64,57 +71,76 @@ def retry_extraction(func, attempts=1, delay=1, default=""):
             time.sleep(delay)
     return default
 
-def download_image(image_url, search_keyword, product_url):
-    """
-    Downloads an image from image_url and saves it in the images folder with a filename formatted as:
-    websitename-keyword-<random six-digit number>.<extension>
-    """
+def download_image(image_url, product_url):
     try:
-        # Extract website name from product_url
-        parsed_product_url = urlparse(product_url)
-        website = parsed_product_url.netloc.replace("www.", "") if parsed_product_url.netloc else "unknown"
+        parsed_url = urlparse(product_url)
+        website = parsed_url.netloc.replace("www.", "") if parsed_url.netloc else "unknown"
+        filename = f"{website}-{search_keyword.replace(' ', '_')}-{random.randint(100000, 999999)}{os.path.splitext(urlparse(image_url).path)[1] or '.jpg'}"
         
-        # Format the keyword (replace spaces with underscores)
-        formatted_keyword = search_keyword.replace(" ", "_")
-        
-        # Generate a random six-digit number
-        random_number = random.randint(100000, 999999)
-        
-        # Extract the file extension from the image URL
-        parsed_image_url = urlparse(image_url)
-        path = parsed_image_url.path
-        ext = os.path.splitext(path)[1]
-        if not ext:
-            ext = ".jpg"
-        
-        # Construct the file name and path
-        file_name = f"{website}-{formatted_keyword}-{random_number}{ext}"
-        file_path = os.path.join(images_folder, file_name)
-        
-        # Download the image
         response = requests.get(image_url, timeout=10)
         if response.status_code == 200:
-            with open(file_path, "wb") as f:
+            with open(os.path.join(images_folder, filename), "wb") as f:
                 f.write(response.content)
-            print(f"Downloaded image: {file_name}")
-        else:
-            print(f"Failed to download image: {image_url}, status: {response.status_code}")
+            print(f"Downloaded: {filename}")
     except Exception as e:
-        print(f"Error downloading image: {image_url}, error: {e}")
+        print(f"Download failed: {e}")
+
+def kill_spinner():
+    browser.execute_script("""
+        const style = document.createElement('style');
+        style.textContent = '.next-loading, .loading-spinner { display: none !important; }';
+        document.head.appendChild(style);
+    """)
+
+def wait_for_page():
+    WebDriverWait(browser, 30).until(
+        EC.invisibility_of_element_located((By.CSS_SELECTOR, ".next-loading"))
+    )
+    WebDriverWait(browser, 45).until(
+        EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".fy23-search-card"))
+    )
+
+def human_like_scroll():
+    for _ in range(random.randint(2, 4)):
+        browser.execute_script(f"window.scrollBy(0, {random.randint(300, 600)})")
+        time.sleep(random.uniform(0.8, 1.5))
+
+def human_like_mouse():
+    actions = ActionChains(browser)
+    for _ in range(random.randint(1, 3)):
+        actions.move_by_offset(random.randint(-50, 50), random.randint(-50, 50)).perform()
+        time.sleep(random.uniform(0.3, 0.7))
 
 def scrape_alibaba_products():
     initialize_json_file()
-    scraped_urls = set()  # Using URL to avoid duplicates
-    first_product = True  # Flag to check if we are saving the first product
+    scraped_urls = set()
+    first_product = True
+
     for page in range(1, search_page + 1):
         for attempt in range(retries):
             try:
-                search_url = f'https://www.alibaba.com/trade/search?fsb=y&IndexArea=product_en&keywords={search_keyword}&originKeywords={search_keyword}&tab=all&&page={page}&spm=a2700.galleryofferlist.pagination.0'
+                search_url = f'https://www.alibaba.com/trade/search?fsb=y&IndexArea=product_en&keywords={search_keyword}&originKeywords={search_keyword}&tab=all&page={page}&spm=a2700.galleryofferlist.pagination.0'
+                
+                # Human-like navigation
+                browser.get("about:blank")
+                time.sleep(random.uniform(0.5, 1.2))
                 browser.get(search_url)
-                time.sleep(3)  # Allow dynamic content to load
+                
+                kill_spinner()
+                wait_for_page()
+                human_like_scroll()
+                human_like_mouse()
+
+                # CAPTCHA check
+                if "captcha" in browser.current_url:
+                    print("CAPTCHA detected! Exiting...")
+                    browser.quit()
+                    return
+
                 product_cards = browser.find_elements(By.CLASS_NAME, 'fy23-search-card')
+                
                 for product_elem in product_cards:
-                    product_json_data = {
+                    product_data = {
                         "url": "",
                         "title": "",
                         "currency": "",
@@ -122,203 +148,109 @@ def scrape_alibaba_products():
                         "min_order": "",
                         "supplier": "",
                         "origin": "",
-                        "feedback": {
-                            "rating": "",
-                            "review": "",
-                        },
+                        "feedback": {"rating": "", "review": ""},
                         "images": [],
                         "videos": []
                     }
-                    product = BeautifulSoup(product_elem.get_attribute('outerHTML'), 'html.parser')
 
-                    # Extracting product url
-                    try:
-                        product_link = retry_extraction(
-                            lambda: product.select_one('.search-card-e-slider__link').get('href')
-                        )
-                        if product_link:
-                            if product_link.startswith('//'):
-                                product_url = 'https:' + product_link
-                            else:
-                                product_url = product_link
-                            if product_url:
-                                product_json_data["url"] = product_url
-                    except Exception as e:
-                        print("Error extracting product url:", e)
+                    product_soup = BeautifulSoup(product_elem.get_attribute('outerHTML'), 'html.parser')
 
-                    # Extracting product title
-                    try:
-                        title_elem = retry_extraction(
-                            lambda: product.select_one('.search-card-e-title span')
-                        )
-                        if title_elem:
-                            product_title = title_elem.get_text(strip=True)
-                            product_json_data["title"] = product_title
-                    except Exception as e:
-                        print("Error extracting product title:", e)
+                    # URL extraction
+                    product_link = retry_extraction(
+                        lambda: product_soup.select_one('.search-card-e-slider__link')['href']
+                    )
+                    if product_link:
+                        product_url = product_link if product_link.startswith('http') else f"https:{product_link}"
+                        product_data["url"] = product_url
 
-                    # Avoid duplicate products by URL
-                    if product_json_data["url"] in scraped_urls:
+                    # Skip duplicates
+                    if product_data["url"] in scraped_urls:
                         continue
 
-                    # Extracting product currency and price
-                    try:
-                        product_currency_price_element = retry_extraction(
-                            lambda: product.select_one('.search-card-e-price-main')
-                        )
-                        if product_currency_price_element:
-                            product_currency_price = product_currency_price_element.get_text(strip=True)
-                            if product_currency_price:
-                                currency = ''.join([c for c in product_currency_price if not c.isdigit() and c not in ['.', '-', ' ']]).strip()
-                                fixed_currency = currency[0]
-                                product_json_data["currency"] = fixed_currency
-                                product_json_data["price"] = product_currency_price.replace(fixed_currency, '').strip()
-                    except Exception as e:
-                        print("Error extracting product currency and price:", e)
-                    
-                    # Extracting product min order
-                    try:
-                        product_min_order_element = retry_extraction(
-                            lambda: product.select_one('.search-card-m-sale-features__item')
-                        )
-                        if product_min_order_element:
-                            product_min_order = product_min_order_element.get_text(strip=True)
-                            if product_min_order.startswith('Min. order:'):
-                                product_json_data["min_order"] = product_min_order.replace('Min. order:', '').strip()
-                    except Exception as e:
-                        print("Error extracting product min order:", e)
-                    
-                    # Extracting product supplier
-                    try:
-                        supplier_name_element = product.select_one('.search-card-e-company')
-                        if supplier_name_element:
-                            supplier_name = supplier_name_element.get_text(strip=True)
-                            if supplier_name:
-                                product_json_data["supplier"] = supplier_name
-                    except Exception as e:
-                        print("Error extracting product supplier:", e)
+                    # Title extraction
+                    product_data["title"] = retry_extraction(
+                        lambda: product_soup.select_one('.search-card-e-title span').get_text(strip=True)
+                    )
 
-                    # Extracting product feedback: ratings and reviews
-                    try:
-                        feedback_element = product.select_one('.search-card-e-review')
-                        if feedback_element:
-                            rating = feedback_element.find("strong").get_text(strip=True)
-                            product_json_data["feedback"]["rating"] = rating
-                            review_text = feedback_element.find("span").get_text(strip=True)
-                            review = review_text.split()[0]
-                            product_json_data["feedback"]["review"] = review
-                    except Exception as e:
-                        print("Error extracting product ratings and reviews:", e)
-                    
-                    # Open product page to extract additional details
-                    if product_json_data["url"]:
+                    # Price and currency
+                    price_element = retry_extraction(
+                        lambda: product_soup.select_one('.search-card-e-price-main').get_text(strip=True)
+                    )
+                    if price_element:
+                        currency = re.sub(r'[\d.,-]', '', price_element).strip()[:1]
+                        product_data["currency"] = currency
+                        product_data["price"] = price_element.replace(currency, '').strip()
+
+                    # Min order
+                    product_data["min_order"] = retry_extraction(
+                        lambda: product_soup.select_one('.search-card-m-sale-features__item').get_text(strip=True, separator=' ').replace('Min. order:', '').strip()
+                    )
+
+                    # Supplier
+                    product_data["supplier"] = retry_extraction(
+                        lambda: product_soup.select_one('.search-card-e-company').get_text(strip=True)
+                    )
+
+                    # Feedback
+                    feedback = product_soup.select_one('.search-card-e-review')
+                    if feedback:
+                        product_data["feedback"]["rating"] = feedback.strong.get_text(strip=True) if feedback.strong else ""
+                        product_data["feedback"]["review"] = feedback.span.get_text(strip=True).split()[0] if feedback.span else ""
+
+                    # Product details page
+                    if product_data["url"]:
                         try:
                             browser.execute_script("window.open('');")
                             browser.switch_to.window(browser.window_handles[-1])
-                            browser.get(product_json_data["url"])
-                            time.sleep(2)
-
-                            # Extracting product images
-                            # try:
-                            #     # Locate the thumbnails container
-                            #     thumbs_container = browser.find_element(
-                            #         By.CSS_SELECTOR,
-                            #         '[data-submodule="ProductImageThumbsList"]'
-                            #     )
-                            #     # Find each thumbnail element (they have inline background‑image styles)
-                            #     thumb_elements = thumbs_container.find_elements(
-                            #         By.CSS_SELECTOR,
-                            #         '[style*="background-image"]'
-                            #     )
-                            #     image_urls = set()
+                            browser.get(product_data["url"])
                             
-                            #     for thumb in thumb_elements:
-                                    
-                            #             # Scroll thumbnail into view & click it
-                                        
-                            #         browser.execute_script("arguments[0].scrollIntoView(true);", thumb)
-                                        
-                            #         thumb.click()
-                                        
-                            #         time.sleep(2)
-                            #         product_image_view = browser.find_element(By.CSS_SELECTOR, '[data-testid="product-image-view"]')
-                            #         product_image_link = product_image_view.get_attribute('src')
-                            #         if product_image_link.startswith('//'):
-                            #             product_image_link = 'https:' + product_image_link
-                            #         image_urls.add(product_image_link)
-                            #         # style = element.get('style', '')
-                            #         # if 'background-image' in style:
-                            #         #     start_index = style.find('url("') + 5
-                            #         #     end_index = style.find('")', start_index)
-                            #         #     if start_index != -1 and end_index != -1:
-                            #         #         image_url = style[start_index:end_index]
-                            #         #         if image_url.startswith('//'):
-                            #         #             image_url = 'https:' + image_url
-                            #         #         image_urls.add(image_url)
-                            #     product_json_data["images"] = list(image_urls)
-                            #     # Download each image immediately
-                            #     for img_url in image_urls:
-                            #         download_image(img_url, search_keyword, product_json_data["url"])
-                            # except Exception as e:
-                            #     print("Error extracting product images", e)
+                            # Wait for product details
+                            WebDriverWait(browser, 15).until(
+                                EC.presence_of_element_located((By.CLASS_NAME, "attribute-info"))
+                            )
 
-                            # Extracting product videos
-                            try:
-                                video_urls = set()
-                                video_elements = browser.find_elements(By.TAG_NAME, 'video')
-                                if video_elements:
-                                    for element in video_elements:
-                                        video_url = element.get_attribute('src')
-                                        if '?' in video_url:
-                                            video_url = video_url.split('?')[0]
-                                        elif 'blob' in video_url:
-                                            video_url = video_url.split('blob')[1]
-                                            if not video_url.startswith('https://'):
-                                                video_url = 'https://' + video_url.split('://')[1]
-                                        video_urls.add(video_url)
-                                    product_json_data["videos"] = list(video_urls)
-                            except Exception as e:
-                                print("Error extracting product videos", e)
+                            # Extract origin
+                            attribute_info = browser.find_element(By.CLASS_NAME, 'attribute-info').get_attribute('outerHTML')
+                            attribute_soup = BeautifulSoup(attribute_info, 'html.parser')
+                            for item in attribute_soup.select('.attribute-item'):
+                                if item.select_one('.left').get_text(strip=True) == 'Place of Origin':
+                                    product_data["origin"] = item.select_one('.right').get_text(strip=True)
+                                    break
 
-                            # Extracting product origin
-                            try:
-                                other_attributes_body = browser.find_element(By.CLASS_NAME, 'attribute-info').get_attribute('outerHTML')
-                                other_attributes_soup = BeautifulSoup(other_attributes_body, 'html.parser')
-                                attribute_items = other_attributes_soup.find_all('div', class_='attribute-item')
-                                for item in attribute_items:
-                                    left_div = item.find('div', class_='left')
-                                    if left_div and left_div.text.strip() == 'Place of Origin':
-                                        right_div = item.find('div', class_='right')
-                                        if right_div:
-                                            origin_value = right_div.text.strip()
-                                            break
-                                product_json_data["origin"] = origin_value
-                            except Exception as e:
-                                print("Error extracting product origin", e)
+                            # Extract videos
+                            video_urls = set()
+                            for video in browser.find_elements(By.TAG_NAME, 'video'):
+                                src = video.get_attribute('src')
+                                if src:
+                                    cleaned = src.split('?')[0].replace('blob:', '')
+                                    video_urls.add(cleaned if cleaned.startswith('http') else f"https:{cleaned}")
+                            product_data["videos"] = list(video_urls)
 
                         except Exception as e:
-                            print("Error processing product page:", e)
+                            print(f"Product page error: {e}")
                         finally:
                             browser.close()
                             browser.switch_to.window(browser.window_handles[0])
-                    
-                    # Save product one by one instead of storing all in memory
-                    if product_json_data["url"] not in scraped_urls:
-                        save_product(product_json_data, first_product)
-                        scraped_urls.add(product_json_data["url"])
+
+                    # Save product
+                    if product_data["url"]:
+                        save_product(product_data, first_product)
+                        scraped_urls.add(product_data["url"])
                         if first_product:
                             first_product = False
-                
-                # Break out of the retry loop for the page if successful
-                break
+
+                break  # Success, exit retry loop
+
             except Exception as e:
-                print(f"Attempt {attempt+1}/{retries}: Error scraping products from page {page}: {e}")
-                time.sleep(1)
+                print(f"Page {page} attempt {attempt+1} failed: {e}")
+                time.sleep(random.uniform(1.5, 3.5))
+
         else:
-            print(f"Failed to scrape products from page {page} after {retries} attempts.")
-    
+            print(f"Failed to scrape page {page} after {retries} attempts")
+
     finalize_json_file()
     browser.quit()
-    print("Scraping completed and saved to products.json")
+    print("Scraping completed")
 
-scrape_alibaba_products()
+if __name__ == "__main__":
+    scrape_alibaba_products()

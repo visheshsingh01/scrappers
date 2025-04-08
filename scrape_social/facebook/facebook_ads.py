@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementClickInterceptedException
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.keys import Keys
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -43,7 +44,7 @@ class FacebookAdsScraper:
         logging.info("Generated URL: %s", url)
         return url
 
-    def scroll_page(self, scrolls=5):
+    def scroll_page(self, scrolls=2):
         """Scroll to load more ads; uses scroll height comparison and explicit waits."""
         last_height = self.browser.execute_script("return document.body.scrollHeight")
         for i in range(scrolls):
@@ -76,11 +77,13 @@ class FacebookAdsScraper:
                 # Initialize data variables for current ad
                 ad_title = None
                 library_id = None
+                ad_link = None 
                 started_info = None
                 ad_text = None
                 logo_url = None
                 advertiser_info = None
                 ad_link = None
+                ad_images_url = []
 
                 # Click "See ad details"
                 try:
@@ -97,9 +100,11 @@ class FacebookAdsScraper:
                     time.sleep(2)  # brief pause for popover to open
                 except Exception as click_exception:
                     logging.warning("Ad #%s: Unable to click 'See ad details': %s", idx, click_exception)
+                    continue  # Skip to next ad if click fails
 
                 # Extract title/status (with fallback if not found)
                 try:
+                    time.sleep(3)
                     status = self.browser.find_element(
                         By.CSS_SELECTOR,
                         "div.x2izyaf.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.xyamay9.x1pi30zi.x1l90r2v.x1swvt13.x1741yl6.x1xqjhkw span.x8t9es0.xw23nyj.x63nzvj.x1fp01tm.xq9mrsl.x1h4wwuj.x117nqv4.xeuugli.x1i64zmx"
@@ -175,14 +180,56 @@ class FacebookAdsScraper:
                 except Exception:
                     logging.info("Ad #%s: No image found.", idx)
 
+
+                # Extract images and videos from the ads 
+                try:
+                    ad_media = WebDriverWait(self.browser, 10).until(
+                        EC.visibility_of_element_located((
+                            By.CSS_SELECTOR,
+                            "div.x178xt8z.xm81vs4.xso031l.xy80clv.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x15bcfbt.xolcy6v.x3ckiwt.xc2dlm9.x2izyaf.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x1t2gpz5.x9f619.x6ikm8r.x10wlt62.x1n2onr6 div.xb57i2i.x1q594ok.x5lxg6s.x78zum5.xdt5ytf.x10wlt62.x1n2onr6.x1ja2u2z.x1pq812k.xfk6m8.x1yqm8si.xjx87ck.xw2csxc.x7p5m3t.x9f619.xat24cr.xwib8y2.x1y1aw1k.x1rohswg.xhfbhpw"
+                        ))
+                    )
+                    ad_images = ad_media.find_elements(By.TAG_NAME, "img")
+                    print(f"The count of images is: {len(ad_images)}")
+                    if ad_images:
+                        for img in ad_images:
+                            self.browser.execute_script("arguments[0].scrollIntoView(true);", img)
+                            time.sleep(1)
+                            img_url = img.get_attribute("src")
+                            if img_url and "https://" in img_url:
+                                print(f"Ad #{idx} image URL: {img_url}")
+                                logging.info("Ad #%s image URL: %s", idx, img_url)
+                                ad_images_url.append(img_url)
+                    else:
+                        logging.info("Ad #%s: No images found in media.", idx)
+                except Exception as e:
+                    try: 
+                        ad_video_element = WebDriverWait(self.browser, 10).until(
+                            EC.visibility_of_element_located((
+                                By.CSS_SELECTOR, "div.x2izyaf.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.xyamay9.x1pi30zi.x1l90r2v.x1swvt13.x1741yl6.x1xqjhkw"
+                            ))
+                        )
+                        ad_video = ad_video_element.find_element(By.CSS_SELECTOR, "video.x1lliihq.x5yr21d.xh8yej3")
+                        if ad_video: 
+                            self.browser.execute_script("arguments[0].scrollIntoView(true);", ad_video)
+                            time.sleep(2)
+                            video_url = ad_video.get_attribute("src")
+                            print(f"Ad #{idx} video URL: {video_url}")
+                            logging.info("Ad #%s video URL: %s", idx, video_url)
+                    except Exception as video_e: 
+                        print("No video found for this ad")
+                    print(f"Ad #{idx}: No image and video found. Error: {e}")
+                    logging.error("Ad #%s: No image found. Error: %s", idx, e)
+
+
                 # Click to show "about" info and extract advertiser info
                 try:
                     about_ad = WebDriverWait(self.browser, 10).until(
-                        EC.element_to_be_clickable(( 
-                            By.CSS_SELECTOR,
-                            "div.x6s0dn4.x1ypdohk.x78zum5.x1q0g3np.x1p5oq8j.xxbr6pl.xwxc41k.xbbxn1n"
-                        ))
-                    )
+                    EC.element_to_be_clickable((
+                        By.XPATH,
+                        ".//div[contains(text(), 'About the advertiser')]"
+                    ))
+                   )
                     self.browser.execute_script("arguments[0].scrollIntoView(true);", about_ad)
                     about_ad.click()
                     try:
@@ -198,13 +245,14 @@ class FacebookAdsScraper:
                         logging.info("Ad #%s: About advertiser info not found.", idx)
                 except Exception:
                     logging.info("Ad #%s: Dropdown for ad bio not found.", idx)
+                    
 
                 # Attempt to close the pop-up with retry logic
                 retry = 0
-                while retry < 2:
+                while retry < 3:
                     try:
                         close_button = WebDriverWait(self.browser, 10).until(
-                            EC.element_to_be_clickable(( 
+                            EC.element_to_be_clickable((
                                 By.CSS_SELECTOR,
                                 "div.x7a106z.x78zum5.x2lah0s.x9otpla.x1wsgfga.x1n0m28w"
                             ))
@@ -218,19 +266,28 @@ class FacebookAdsScraper:
                     except Exception as e:
                         logging.info("Ad #%s: No close button found on attempt %s: %s", idx, retry+1, e)
                         retry += 1
-                        time.sleep(2)
-                # Short pause before processing next ad
-                time.sleep(2)
+                        time.sleep(3)
+                else:  # Only executes if the loop completes without breaking (i.e., all retries failed)
+                    try:
+                        # Send ESC key as fallback
+                        self.browser.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+                        logging.info("Ad #%s: Sent ESC key to close pop-up as fallback.", idx)
+                    except Exception as e:
+                        logging.warning("Ad #%s: ESC key fallback failed: %s", idx, e)
+                time.sleep(3)  # Short pause before processing next ad
 
                 # Save the ad data into our structured JSON object
                 ad_data = {
                     "ad_number": idx,
                     "title": ad_title,
                     "library_id": library_id,
+                    "ad_link": ad_link,
                     "started_running": started_info,
                     "ad_text": ad_text,
                     "logo_url": logo_url,
-                    "advertiser_info": advertiser_info
+                    "advertiser_info": advertiser_info,
+                    "ad_images": ad_images_url
+                    
                 }
                 self.ads_data.append(ad_data)
             

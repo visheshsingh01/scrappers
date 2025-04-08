@@ -20,7 +20,7 @@ with open("products.json", "w", encoding="utf-8") as f:
 # Global scraping configurations
 retries = 3
 search_page = 100  # Adjust to desired number of pages
-search_keyword = "Caterpillar Engine Fuel Injectors"
+search_keyword = "Christian Dior perfumes"  # Adjust to desired search keyword
 
 # Setup Selenium configurations
 options = webdriver.FirefoxOptions()
