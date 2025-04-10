@@ -44,12 +44,12 @@ class FacebookAdsScraper:
         logging.info("Generated URL: %s", url)
         return url
 
-    def scroll_page(self, scrolls=2):
+    def scroll_page(self, scrolls=10):
         """Scroll to load more ads; uses scroll height comparison and explicit waits."""
         last_height = self.browser.execute_script("return document.body.scrollHeight")
         for i in range(scrolls):
             self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)  # reduced wait time; adjust as needed
+            time.sleep(10)  # reduced wait time; adjust as needed
             new_height = self.browser.execute_script("return document.body.scrollHeight")
             if new_height == last_height:
                 logging.info("✅ No more content to load on scroll %s.", i)
@@ -84,6 +84,7 @@ class FacebookAdsScraper:
                 advertiser_info = None
                 ad_link = None
                 ad_images_url = []
+                video_url = None
 
                 # Click "See ad details"
                 try:
@@ -105,10 +106,10 @@ class FacebookAdsScraper:
                 # Extract title/status (with fallback if not found)
                 try:
                     time.sleep(3)
-                    status = self.browser.find_element(
+                    status = WebDriverWait(self.browser, 20).until(EC.visibility_of_element_located((
                         By.CSS_SELECTOR,
                         "div.x2izyaf.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.xyamay9.x1pi30zi.x1l90r2v.x1swvt13.x1741yl6.x1xqjhkw span.x8t9es0.xw23nyj.x63nzvj.x1fp01tm.xq9mrsl.x1h4wwuj.x117nqv4.xeuugli.x1i64zmx"
-                    )
+                    )))
                     ad_title = status.text
                     logging.info("Ad #%s title: %s", idx, ad_title)
                 except Exception:
@@ -117,13 +118,13 @@ class FacebookAdsScraper:
                 # Extract Library ID
                 # Extract Library ID and construct ad link
                 try:
-                    container = WebDriverWait(self.browser, 10).until(
+                    container = WebDriverWait(self.browser, 20).until(
                         EC.visibility_of_element_located((
                             By.CSS_SELECTOR,
                             "div.x2izyaf.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.xyamay9.x1pi30zi.x1l90r2v.x1swvt13.x1741yl6.x1xqjhkw"
                         ))
                     )
-                    lib_id_element = WebDriverWait(container, 5).until(
+                    lib_id_element = WebDriverWait(container, 20).until(
                         EC.visibility_of_element_located((By.XPATH, ".//span[contains(text(), 'Library ID:')]"))
                     )
                     library_id_text = lib_id_element.text
@@ -218,6 +219,7 @@ class FacebookAdsScraper:
                             logging.info("Ad #%s video URL: %s", idx, video_url)
                     except Exception as video_e: 
                         print("No video found for this ad")
+                        video_url = None
                     print(f"Ad #{idx}: No image and video found. Error: {e}")
                     logging.error("Ad #%s: No image found. Error: %s", idx, e)
 
@@ -254,13 +256,15 @@ class FacebookAdsScraper:
                         close_button = WebDriverWait(self.browser, 10).until(
                             EC.element_to_be_clickable((
                                 By.CSS_SELECTOR,
-                                "div.x7a106z.x78zum5.x2lah0s.x9otpla.x1wsgfga.x1n0m28w"
+                                "div.x6s0dn4.x78zum5.x1q0g3np.xozqiw3.x2lwn1j.xeuugli.x1iyjqo2.x19lwn94.x2lah0s.x13a6bvl div.x3nfvp2.x193iq5w.xxymvpz.xeuugli.x2lah0s"
                             ))
                         )
                         if close_button:
                             self.browser.execute_script("arguments[0].scrollIntoView(true);", close_button)
                             logging.info("Ad #%s: Close button found; clicking to close pop-up.", idx)
-                            close_button.click()
+                            # Replace the close_button.click() line with:
+                            
+                            self.browser.execute_script("arguments[0].click();", close_button)
                             time.sleep(2)
                             break
                     except Exception as e:
@@ -286,7 +290,8 @@ class FacebookAdsScraper:
                     "ad_text": ad_text,
                     "logo_url": logo_url,
                     "advertiser_info": advertiser_info,
-                    "ad_images": ad_images_url
+                    "ad_images": ad_images_url,
+                    "ad_video" : video_url
                     
                 }
                 self.ads_data.append(ad_data)
@@ -314,7 +319,7 @@ class FacebookAdsScraper:
                 lambda d: d.execute_script("return document.readyState") == "complete"
             )
             time.sleep(2)
-            self.scroll_page(scrolls=5)
+            self.scroll_page(scrolls=2)
             self.extract_ads()
         finally:
             if self.browser:
